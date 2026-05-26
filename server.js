@@ -13,6 +13,13 @@ const app = express();
 const BASE_URL = "https://zenius-i-vanisher.com/v5.2";
 const STEP_MANIA_BASE_URL = "https://stepmaniaonline.net";
 const SIMFILE_CATEGORIES = new Set(["latest-user", "latest-official", "top-official", "top-user"]);
+const LIBRARY_CACHE_FILENAME = ".simbridge-cache.json";
+const REMOTE_PACK_INDEX_TTL_MS = 10 * 60 * 1000;
+
+let remotePackIndexCache = {
+  fetchedAt: 0,
+  items: []
+};
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -355,6 +362,196 @@ function normalizeSongName(value) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function parseCountValue(value) {
+  const cleaned = cleanText(String(value || "")).replace(/[^0-9]/g, "");
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildLibraryCachePath(songLibraryPathInput) {
+  return path.join(path.resolve(songLibraryPathInput), LIBRARY_CACHE_FILENAME);
+}
+
+function createEmptyLibraryCache() {
+  return {
+    version: 1,
+    packs: {}
+  };
+}
+
+async function readLibraryCache(songLibraryPathInput) {
+  const cachePath = buildLibraryCachePath(songLibraryPathInput);
+
+  try {
+    const raw = await fs.readFile(cachePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.packs || typeof parsed.packs !== "object") {
+      return createEmptyLibraryCache();
+    }
+
+    return {
+      version: 1,
+      packs: parsed.packs
+    };
+  } catch {
+    return createEmptyLibraryCache();
+  }
+}
+
+async function writeLibraryCache(songLibraryPathInput, cache) {
+  const cachePath = buildLibraryCachePath(songLibraryPathInput);
+  const payload = JSON.stringify(cache, null, 2);
+  await fs.writeFile(cachePath, payload, "utf8");
+}
+
+async function listTopLevelDirectories(songLibraryPathInput) {
+  const songLibraryPath = path.resolve(songLibraryPathInput);
+  const entries = await fs.readdir(songLibraryPath, { withFileTypes: true });
+  return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+}
+
+async function fetchStepmaniaPackIndexWithCache(force = false) {
+  const now = Date.now();
+  if (!force && remotePackIndexCache.items.length && now - remotePackIndexCache.fetchedAt < REMOTE_PACK_INDEX_TTL_MS) {
+    return remotePackIndexCache.items;
+  }
+
+  const response = await axios.get(`${STEP_MANIA_BASE_URL}/`, {
+    timeout: 20000,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+    }
+  });
+
+  const items = parseStepmaniaPackRows(response.data);
+  remotePackIndexCache = {
+    fetchedAt: now,
+    items
+  };
+
+  return items;
+}
+
+function buildStepmaniaPackSnapshot(item) {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    packId: item.packId || "",
+    name: item.name || "",
+    songCount: item.songCount || "0",
+    size: item.size || "-",
+    lastUpdate: item.lastUpdate || "-",
+    zipUrl: item.zipUrl || "",
+    detailUrl: item.detailUrl || ""
+  };
+}
+
+function hasRemoteSnapshotChanged(previousSnapshot, nextSnapshot) {
+  if (!previousSnapshot || !nextSnapshot) {
+    return false;
+  }
+
+  return (
+    cleanText(previousSnapshot.songCount) !== cleanText(nextSnapshot.songCount)
+    || cleanText(previousSnapshot.size) !== cleanText(nextSnapshot.size)
+    || cleanText(previousSnapshot.lastUpdate) !== cleanText(nextSnapshot.lastUpdate)
+  );
+}
+
+function inferMatchingFoldersByPackName(folderNames, packName) {
+  const normalizedPackName = normalizeSongName(packName || "");
+  if (!normalizedPackName) {
+    return [];
+  }
+
+  const exactMatches = folderNames.filter((folderName) => normalizeSongName(folderName) === normalizedPackName);
+  if (exactMatches.length) {
+    return exactMatches;
+  }
+
+  return folderNames.filter((folderName) => {
+    const normalizedFolder = normalizeSongName(folderName);
+    return normalizedFolder.includes(normalizedPackName) || normalizedPackName.includes(normalizedFolder);
+  });
+}
+
+async function refreshDownloadedPackMetadata(songLibraryPathInput, packId, candidateFolders = []) {
+  if (!songLibraryPathInput || !packId) {
+    return;
+  }
+
+  const songLibraryPath = path.resolve(songLibraryPathInput);
+  const cache = await readLibraryCache(songLibraryPath);
+  let changed = false;
+
+  let remotePackItem = null;
+  try {
+    const remoteItems = await fetchStepmaniaPackIndexWithCache(true);
+    remotePackItem = remoteItems.find((item) => item.packId === packId) || null;
+  } catch {
+    remotePackItem = null;
+  }
+
+  const snapshot = buildStepmaniaPackSnapshot(remotePackItem);
+  const topFolders = await listTopLevelDirectories(songLibraryPath).catch(() => []);
+
+  const linkedFolders = Object.entries(cache.packs)
+    .filter(([, entry]) => entry && entry.linkedPackId === packId)
+    .map(([folderName]) => folderName);
+
+  const inferredFolders = inferMatchingFoldersByPackName(topFolders, remotePackItem?.name || "");
+  const targets = new Set([...candidateFolders, ...linkedFolders, ...inferredFolders]);
+
+  for (const folderName of targets) {
+    const packPath = path.join(songLibraryPath, folderName);
+    let stats;
+    try {
+      stats = await fs.stat(packPath);
+    } catch {
+      continue;
+    }
+
+    if (!stats.isDirectory()) {
+      continue;
+    }
+
+    const existing = cache.packs[folderName] || {};
+    cache.packs[folderName] = {
+      ...existing,
+      linkedPackId: packId,
+      sourceType: "stepmania-pack",
+      sourceSnapshot: snapshot || existing.sourceSnapshot || null,
+      lastDownloadedAt: new Date().toISOString(),
+      packMtimeMs: Number(stats.mtimeMs) || 0
+    };
+    changed = true;
+  }
+
+  if (changed) {
+    await writeLibraryCache(songLibraryPath, cache);
+  }
+}
+
+function buildRemotePackLookups(items) {
+  const byPackId = new Map();
+  const byNormalizedName = new Map();
+
+  for (const item of items || []) {
+    if (item.packId) {
+      byPackId.set(item.packId, item);
+    }
+
+    const key = normalizeSongName(item.name || "");
+    if (key && !byNormalizedName.has(key)) {
+      byNormalizedName.set(key, item);
+    }
+  }
+
+  return { byPackId, byNormalizedName };
+}
+
 async function buildInstalledSongIndex(songLibraryPathInput) {
   if (!songLibraryPathInput) {
     return new Set();
@@ -516,22 +713,65 @@ async function buildLocalLibraryItems(songLibraryPathInput, filters = {}) {
   }
 
   const songLibraryPath = path.resolve(songLibraryPathInput);
+  const cache = await readLibraryCache(songLibraryPath);
   const entries = await fs.readdir(songLibraryPath, { withFileTypes: true });
   const folders = entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 
+  const folderSet = new Set(folders);
+  let cacheDirty = false;
+
+  for (const folderName of Object.keys(cache.packs)) {
+    if (folderSet.has(folderName)) {
+      continue;
+    }
+
+    delete cache.packs[folderName];
+    cacheDirty = true;
+  }
+
   const titleNeedle = cleanText(filters.songtitle || "").toLowerCase();
   const artistNeedle = cleanText(filters.songartist || "").toLowerCase();
   const hasFilter = Boolean(titleNeedle || artistNeedle);
   const combinedNeedle = [titleNeedle, artistNeedle].filter(Boolean).join(" ").trim();
 
+  let remoteLookup = { byPackId: new Map(), byNormalizedName: new Map() };
+
+  try {
+    remoteLookup = buildRemotePackLookups(await fetchStepmaniaPackIndexWithCache());
+  } catch {
+    remoteLookup = { byPackId: new Map(), byNormalizedName: new Map() };
+  }
+
   const results = [];
 
   for (const folderName of folders) {
     const packPath = path.join(songLibraryPath, folderName);
-    const songs = await collectPackSongs(packPath);
+    const stats = await fs.stat(packPath).catch(() => null);
+    if (!stats || !stats.isDirectory()) {
+      continue;
+    }
+
+    const packMtimeMs = Number(stats.mtimeMs) || 0;
+    let cacheEntry = cache.packs[folderName] || {};
+
+    if (!Array.isArray(cacheEntry.songs) || Number(cacheEntry.packMtimeMs) !== packMtimeMs) {
+      const songs = await collectPackSongs(packPath);
+      cacheEntry = {
+        ...cacheEntry,
+        songs,
+        songCount: songs.length,
+        packMtimeMs,
+        lastScannedAt: new Date().toISOString()
+      };
+      cache.packs[folderName] = cacheEntry;
+      cacheDirty = true;
+    }
+
+    const songs = Array.isArray(cacheEntry.songs) ? cacheEntry.songs : [];
+    const localSongCount = Number(cacheEntry.songCount ?? songs.length) || 0;
 
     if (hasFilter) {
       const packMatch = folderName.toLowerCase().includes(combinedNeedle);
@@ -541,20 +781,59 @@ async function buildLocalLibraryItems(songLibraryPathInput, filters = {}) {
       }
     }
 
+    let remoteItem = null;
+    if (cacheEntry.linkedPackId) {
+      remoteItem = remoteLookup.byPackId.get(cacheEntry.linkedPackId) || null;
+    }
+
+    if (!remoteItem) {
+      remoteItem = remoteLookup.byNormalizedName.get(normalizeSongName(folderName)) || null;
+    }
+
+    if (remoteItem && cacheEntry.linkedPackId !== remoteItem.packId) {
+      cacheEntry.linkedPackId = remoteItem.packId;
+      cache.packs[folderName] = cacheEntry;
+      cacheDirty = true;
+    }
+
+    const previousSnapshot = cacheEntry.sourceSnapshot || null;
+    const nextSnapshot = buildStepmaniaPackSnapshot(remoteItem);
+    if (nextSnapshot && (!previousSnapshot || hasRemoteSnapshotChanged(previousSnapshot, nextSnapshot))) {
+      cacheEntry.sourceSnapshot = nextSnapshot;
+      cache.packs[folderName] = cacheEntry;
+      cacheDirty = true;
+    }
+
+    const snapshot = cacheEntry.sourceSnapshot || nextSnapshot;
+    const remoteSongCount = parseCountValue(snapshot?.songCount || "0");
+    const remoteChanged = hasRemoteSnapshotChanged(previousSnapshot, nextSnapshot);
+    const songCountMismatch = remoteSongCount > 0 && remoteSongCount !== localSongCount;
+    const updateAvailable = Boolean(snapshot?.zipUrl) && (remoteChanged || songCountMismatch);
+
     results.push({
       sourceType: "local-pack",
       localPackId: folderName,
       simfileId: "",
-      packId: "",
+      packId: cacheEntry.linkedPackId || "",
       name: folderName,
-      detailUrl: "",
-      category: String(songs.length),
+      detailUrl: snapshot?.detailUrl || "",
+      category: String(localSongCount),
       categoryUrl: "",
       lastUpdate: normalizePathForUi(path.join(songLibraryPath, folderName)),
-      songCount: String(songs.length),
+      songCount: String(localSongCount),
       size: "-",
-      installed: true
+      installed: true,
+      updateAvailable,
+      updatePackId: snapshot?.packId || "",
+      remoteSongCount: snapshot?.songCount || "",
+      remoteLastUpdate: snapshot?.lastUpdate || "",
+      remoteSize: snapshot?.size || "",
+      remoteDetailUrl: snapshot?.detailUrl || ""
     });
+  }
+
+  if (cacheDirty) {
+    await writeLibraryCache(songLibraryPath, cache);
   }
 
   return results;
@@ -976,7 +1255,23 @@ app.get("/api/downloaded/:packId", async (req, res) => {
       return res.status(404).json({ error: "Local pack folder was not found." });
     }
 
-    const songs = await collectPackSongs(packPath);
+    const cache = await readLibraryCache(songLibraryPath);
+    const packMtimeMs = Number(stats.mtimeMs) || 0;
+    const cacheEntry = cache.packs[packId] || {};
+    let songs = Array.isArray(cacheEntry.songs) ? cacheEntry.songs : [];
+
+    if (!songs.length || Number(cacheEntry.packMtimeMs) !== packMtimeMs) {
+      songs = await collectPackSongs(packPath);
+      cache.packs[packId] = {
+        ...cacheEntry,
+        songs,
+        songCount: songs.length,
+        packMtimeMs,
+        lastScannedAt: new Date().toISOString()
+      };
+      await writeLibraryCache(songLibraryPath, cache);
+    }
+
     const rows = songs.map((song) => [song.name]);
 
     res.json({
@@ -1246,6 +1541,8 @@ app.post("/api/download-pack", async (req, res) => {
     writeProgressEvent(res, { type: "progress", progressPct: 2, message: "Preparing destination..." });
     await fs.mkdir(destinationDir, { recursive: true });
 
+    const beforeFolders = await listTopLevelDirectories(destinationDir).catch(() => []);
+
     writeProgressEvent(res, { type: "progress", progressPct: 4, message: "Downloading pack ZIP..." });
     const transfer = await downloadZipToFile(
       zipUrl,
@@ -1268,6 +1565,12 @@ app.post("/api/download-pack", async (req, res) => {
 
     const zip = new AdmZip(tempZipPath);
     const entryCount = await extractZipSafely(zip, destinationDir);
+
+    const afterFolders = await listTopLevelDirectories(destinationDir).catch(() => []);
+    const beforeSet = new Set(beforeFolders);
+    const createdFolders = afterFolders.filter((folderName) => !beforeSet.has(folderName));
+
+    await refreshDownloadedPackMetadata(destinationDir, packId, createdFolders).catch(() => {});
 
     await fs.unlink(tempZipPath).catch(() => {});
 

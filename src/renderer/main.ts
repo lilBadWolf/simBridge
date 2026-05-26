@@ -353,6 +353,21 @@ function setButtonInstalled(buttonEl) {
   buttonEl.disabled = true;
 }
 
+function setButtonUpdate(buttonEl) {
+  if (!buttonEl) {
+    return;
+  }
+
+  buttonEl.classList.remove("downloading-btn", "installed-btn");
+  buttonEl.textContent = "Update";
+  buttonEl.setAttribute("aria-label", "Update downloaded pack");
+  buttonEl.disabled = false;
+}
+
+function canUpdateLocalPack(item) {
+  return Boolean(item && item.sourceType === "local-pack" && item.updateAvailable && item.updatePackId);
+}
+
 function resetButtonToDownload(buttonEl) {
   if (!buttonEl) {
     return;
@@ -455,10 +470,20 @@ function setDownloadUiState(item, mode) {
     return;
   }
 
-  resetButtonToDownload(ui?.downloadBtn);
+  if (canUpdateLocalPack(item)) {
+    setButtonUpdate(ui?.downloadBtn);
+  } else {
+    resetButtonToDownload(ui?.downloadBtn);
+  }
+
   removeDownloadToast(item);
   if (detailModal.classList.contains("open") && modalDownloadBtn.classList.contains("downloading-btn")) {
-    resetButtonToDownload(modalDownloadBtn);
+    if (canUpdateLocalPack(item)) {
+      setButtonUpdate(modalDownloadBtn);
+    } else {
+      resetButtonToDownload(modalDownloadBtn);
+    }
+
     modalDownloadBtn.onclick = () => {
       downloadSimfile(item, modalDownloadBtn);
     };
@@ -504,6 +529,28 @@ function configureModalDownloadButton(item) {
     return;
   }
 
+  modalDownloadBtn.onclick = () => {
+    downloadSimfile(item, modalDownloadBtn);
+  };
+}
+
+function configureModalLocalPackActions(item) {
+  const canUpdate = canUpdateLocalPack(item);
+  const hasWebLink = Boolean(item?.remoteDetailUrl || item?.detailUrl);
+  setModalActionVisibility(hasWebLink, canUpdate);
+
+  if (hasWebLink) {
+    modalViewWeb.href = item.remoteDetailUrl || item.detailUrl;
+  } else {
+    modalViewWeb.removeAttribute("href");
+  }
+
+  if (!canUpdate) {
+    modalDownloadBtn.onclick = null;
+    return;
+  }
+
+  setButtonUpdate(modalDownloadBtn);
   modalDownloadBtn.onclick = () => {
     downloadSimfile(item, modalDownloadBtn);
   };
@@ -596,11 +643,12 @@ async function downloadSimfile(item, buttonEl) {
     return;
   }
 
-  const isPack = item.sourceType === "stepmania-pack";
+  const isPack = item.sourceType === "stepmania-pack" || canUpdateLocalPack(item);
+  const packId = item.packId || item.updatePackId || "";
   activeDownloadKeys.add(key);
   setDownloadUiState(item, "downloading");
   setRowProgressState(item, 2, "Starting download...");
-  setStatus(`Downloading ${item.name}...`);
+  setStatus(`${canUpdateLocalPack(item) ? "Updating" : "Downloading"} ${item.name}...`);
 
   try {
     const endpoint = isPack ? "/api/download-pack" : "/api/download-simfile";
@@ -609,7 +657,7 @@ async function downloadSimfile(item, buttonEl) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         simfileId: item.simfileId,
-        packId: item.packId,
+        packId,
         songLibraryPath
       })
     });
@@ -666,6 +714,18 @@ async function downloadSimfile(item, buttonEl) {
       throw new Error("Download did not return a completion event.");
     }
 
+    if (canUpdateLocalPack(item)) {
+      item.updateAvailable = false;
+      setButtonInstalled(buttonEl);
+      modalDownloadBtn.onclick = null;
+      setStatus(`Updated and extracted into ${finalData.destinationDir}`);
+      setTimeout(() => {
+        setRowProgressState(item, 100, "", false);
+      }, 1200);
+      await loadDownloadedLibrary();
+      return;
+    }
+
     setStatus(`Downloaded and unzipped into ${finalData.destinationDir}`);
     item.installed = true;
     setDownloadUiState(item, "installed");
@@ -675,6 +735,14 @@ async function downloadSimfile(item, buttonEl) {
   } catch (error) {
     setStatus(error.message, true);
     setDownloadUiState(item, "idle");
+
+    if (canUpdateLocalPack(item)) {
+      setButtonUpdate(buttonEl);
+      if (detailModal.classList.contains("open")) {
+        setButtonUpdate(modalDownloadBtn);
+      }
+    }
+
     setRowProgressState(item, 0, "", false);
   } finally {
     activeDownloadKeys.delete(key);
@@ -1063,8 +1131,7 @@ async function showLocalPackDetailsModal(item) {
   modalSubtitle.textContent = "Reading songs from your local Song Library.";
   modalStats.innerHTML = "";
   progressList.innerHTML = "";
-  setModalActionVisibility(false, false);
-  modalViewWeb.removeAttribute("href");
+  configureModalLocalPackActions(item);
   openModal();
 
   try {
@@ -1078,7 +1145,7 @@ async function showLocalPackDetailsModal(item) {
 
     modalTitle.textContent = data.title || item.name;
     modalStats.innerHTML = `<span class="meta-chip meta-chip-head">🎵 ${escapeHtml(String(data.songCount || 0))}</span>`;
-    modalSubtitle.innerHTML = `<span class="meta-chip">Local Pack</span><span class="meta-chip">Folder: ${escapeHtml(item.name || "-")}</span>`;
+    modalSubtitle.innerHTML = `<span class="meta-chip">Local Pack</span><span class="meta-chip">Folder: ${escapeHtml(item.name || "-")}</span>${item.updateAvailable ? '<span class="meta-chip">Update available</span>' : ""}`;
     renderSimpleSongsTable(progressList, data.songsTable || { headers: [], rows: [] });
   } catch (error) {
     modalTitle.textContent = "Could not load local pack details";
@@ -1197,7 +1264,21 @@ function renderRows(items, mode) {
     });
 
     if (mode === "downloaded") {
-      downloadBtn.hidden = true;
+      if (canUpdateLocalPack(item)) {
+        downloadBtn.hidden = false;
+        setButtonUpdate(downloadBtn);
+        downloadBtn.addEventListener("click", () => {
+          downloadSimfile(item, downloadBtn);
+        });
+
+        if (activeDownloadKeys.has(key)) {
+          setButtonDownloading(downloadBtn, true);
+          setRowProgressState(item, 2, "Starting update...");
+        }
+      } else {
+        downloadBtn.hidden = true;
+      }
+
       bodyEl.appendChild(fragment);
       continue;
     }
@@ -1257,7 +1338,8 @@ async function loadDownloadedLibrary(filters: { songtitle?: string; songartist?:
 
     countEl.textContent = `${data.count} items`;
     renderRows(data.items, "downloaded");
-    setStatus(`${data.count} Packs Installed`);
+    const updateCount = (data.items || []).filter((item) => item.updateAvailable).length;
+    setStatus(`${data.count} Packs Installed${updateCount ? ` (${updateCount} update${updateCount === 1 ? "" : "s"} available)` : ""}`);
   } catch (error) {
     if (isActiveListRequest(requestId)) {
       setStatus(error.message, true);
