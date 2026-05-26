@@ -1,8 +1,4 @@
 <p align="center">
-  <img src="public/brand/logo-primary.png" alt="simBridge" width="320" />
-</p>
-
-<p align="center">
   <img src="public/brand/banner-hero.png" alt="simBridge banner" width="100%" />
 </p>
 
