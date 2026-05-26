@@ -1,0 +1,44 @@
+{
+  "name": "simbridge",
+  "productName": "simBridge",
+  "version": "1.0.0",
+  "description": "Desktop simfile browser/downloader",
+  "main": ".vite/build/main.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "make:win": "electron-forge make --platform=win32",
+    "make:linux": "electron-forge make --platform=linux --arch=x64",
+    "make:linux:arm64": "electron-forge make --platform=linux --arch=arm64",
+    "lint": "tsc --noEmit",
+    "postinstall": "patch-package"
+  },
+  "keywords": [
+    "simfiles",
+    "ddr",
+    "itgmania",
+    "stepmania"
+  ],
+  "author": "The Company of Wolves",
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "axios": "^1.10.0",
+    "cheerio": "^1.0.0",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-deb": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.11.2",
+    "@electron-forge/plugin-vite": "^7.11.2",
+    "@felixrieseberg/electron-forge-maker-nsis": "^7.2.0",
+    "@types/node": "^25.9.1",
+    "electron": "^42.2.0",
+    "patch-package": "^8.0.1",
+    "png-to-ico": "^3.0.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14"
+  }
+}

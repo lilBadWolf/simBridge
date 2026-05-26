@@ -1,0 +1,26 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "Get-Command": true,
+        "npm install": true,
+        "New-Item": true,
+        "Out-Null": true,
+        "Copy-Item": true,
+        "Test-Path": true,
+        "Get-Item": true,
+        "Start-Process": true,
+        "Get-Process": true,
+        "/^node -e \"const \\{ app \\} = require\\('\\./server'\\); const req = \\{ query: \\{ songLibraryPath: 'D:/Projects/simBridge' \\} \\}; const res = \\{ json: \\(x\\) => console\\.log\\(JSON\\.stringify\\(\\{count:x\\.count, first:x\\.items\\?\\.\\[0\\]\\}, null, 2\\)\\), status: function\\(c\\)\\{ this\\._c=c; return this; \\} \\}; app\\._router\\.handle\\(\\{ method:'GET', url:'/api/downloaded', query:req\\.query \\}, res, console\\.error\\);\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node server\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^powershell -Command \"Invoke-RestMethod -Uri 'http://127\\.0\\.0\\.1:3000/api/downloaded\\?songLibraryPath=D:/Projects/simBridge' \\| ConvertTo-Json -Depth 4\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "o": true
+    }
+}

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>simBridge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <button id="settings-open" class="settings-fab" type="button" aria-label="Open settings">⚙️</button>
+    <main class="app-shell">
+      <header class="hero">
+        <div class="hero-top-row">
+          <img class="brand-logo" src="/brand/logo-primary.png" alt="simBridge" />
+          <div class="source-chips" role="group" aria-label="Simfile source selector">
+            <button type="button" class="secondary source-chip active" data-source="ziv">zIV Songs</button>
+            <button type="button" class="secondary source-chip" data-source="stepmania">Stepmania Packs</button>
+            <button type="button" class="secondary source-chip" data-source="downloaded">Downloaded</button>
+          </div>
+        </div>
+      </header>
+
+      <section class="panel search-panel">
+        <form id="search-form" class="search-form">
+          <label>
+            Title
+            <input id="songtitle" name="songtitle" type="text" placeholder="e.g. PARANOiA" />
+          </label>
+          <label>
+            Artist
+            <input id="songartist" name="songartist" type="text" placeholder="e.g. NAOKI" />
+          </label>
+          <label>
+            Pack Name
+            <input id="pack-category" name="packcategory" type="text" placeholder="e.g. DDR 1st" />
+          </label>
+          <div class="search-submit-wrap">
+            <button type="submit">Search</button>
+            <button id="search-clear" class="clear-search-btn" type="button" aria-label="Clear search fields">X</button>
+          </div>
+          <div class="actions">
+            <div id="ziv-category-wrap" class="category-chips" role="group" aria-label="ZIv feed categories">
+              <button type="button" class="secondary category-chip active" data-category="latest-user">Latest User</button>
+              <button type="button" class="secondary category-chip" data-category="latest-official">Latest Official</button>
+              <button type="button" class="secondary category-chip" data-category="top-official">Top Official</button>
+              <button type="button" class="secondary category-chip" data-category="top-user">Top User</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel list-panel">
+        <div class="list-head">
+          <h2 id="list-title">Latest User Songs</h2>
+          <span id="count-pill" class="count-pill">0 items</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th id="col-1">Name</th>
+                <th id="col-2">Category</th>
+                <th id="col-3">Last Update</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer class="app-footer panel" aria-label="Source credits">
+        <p id="status" class="status footer-status">Loading latest user songs...</p>
+        <p>
+          <a href="https://zenius-i-vanisher.com/v5.2/" target="_blank" rel="noreferrer">ZIv (Zenius -I- vanisher)</a>
+          and
+          <a href="https://stepmaniaonline.net/" target="_blank" rel="noreferrer">Stepmania Online</a>
+        </p>
+        <p>
+          <a href="https://thecompanyofwolves.com" target="_blank" rel="noreferrer">The Company of Wolves</a>
+        </p>
+      </footer>
+    </main>
+
+    <template id="row-template">
+      <tr>
+        <td class="name"></td>
+        <td class="category"></td>
+        <td class="meta"></td>
+        <td>
+          <div class="row-actions">
+            <button class="detail-btn" type="button">Details</button>
+            <button class="download-btn" type="button">Download</button>
+          </div>
+        </td>
+      </tr>
+    </template>
+
+    <div id="download-toast-host" class="download-toast-host" aria-live="polite" aria-atomic="false"></div>
+
+    <div id="detail-modal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" data-close="true"></div>
+      <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <header class="modal-header">
+          <h3 id="modal-title">Simfile Details</h3>
+          <div class="modal-header-right">
+            <div id="modal-stats" class="modal-stats"></div>
+            <button id="modal-close" class="icon-btn" type="button" aria-label="Close details">x</button>
+          </div>
+        </header>
+        <p id="modal-subtitle" class="modal-subtitle"></p>
+
+        <div class="modal-grid">
+          <section class="modal-card">
+            <h4 id="modal-section-title">Progress Information</h4>
+            <div id="progress-list"></div>
+          </section>
+        </div>
+
+        <footer class="modal-actions">
+          <a id="modal-view-web" class="web-link" target="_blank" rel="noreferrer">View on Web</a>
+          <button id="modal-download" type="button">Download</button>
+        </footer>
+      </section>
+    </div>
+
+    <div id="settings-modal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" data-settings-close="true"></div>
+      <section class="modal-panel settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header class="modal-header">
+          <h3 id="settings-title">Settings</h3>
+          <button id="settings-close" class="icon-btn" type="button" aria-label="Close settings">x</button>
+        </header>
+
+        <div class="settings-body">
+          <label class="settings-field" for="song-library-path">
+            Song Library Location
+            <input
+              id="song-library-path"
+              name="song-library-path"
+              type="text"
+              placeholder="e.g. C:/Games/ITGmania/Songs"
+            />
+          </label>
+          <p class="settings-help">
+            ZIv single-song ZIPs are unzipped to SongLibrary/Shit. Stepmania pack ZIPs are unzipped directly to SongLibrary.
+          </p>
+        </div>
+
+        <footer class="modal-actions">
+          <button id="song-library-browse" type="button" class="secondary">Browse...</button>
+          <button id="settings-save" type="button" class="secondary">Save Settings</button>
+        </footer>
+      </section>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,104 @@
+name: publish
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            make_command: npm run make:win
+          - name: linux-x64
+            os: ubuntu-24.04
+            make_command: npm run make:linux
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            make_command: npm run make:linux:arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: install frontend dependencies
+        run: npm ci
+
+      - name: build distributables
+        env:
+          SIMBRIDGE_GITHUB_REPO: ${{ github.repository }}
+        run: ${{ matrix.make_command }}
+
+      - name: upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: simBridge-${{ matrix.name }}
+          path: out/make/**
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: determine version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=app-v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: load release notes from RELEASE.md
+        id: release_notes
+        shell: bash
+        run: |
+          if [ ! -f RELEASE.md ]; then
+            echo "RELEASE.md not found. Create RELEASE.md with your release notes." >&2
+            exit 1
+          fi
+          {
+            echo 'body<<EOF_RELEASE_BODY'
+            cat RELEASE.md
+            echo
+            echo 'EOF_RELEASE_BODY'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: publish release and assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: simBridge v${{ steps.version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.body }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: dist-artifacts/**
