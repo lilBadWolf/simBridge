@@ -1,12 +1,13 @@
-const express = require("express");
-const axios = require("axios");
-const cheerio = require("cheerio");
-const path = require("path");
-const fsNative = require("fs");
-const fs = require("fs/promises");
-const os = require("os");
-const AdmZip = require("adm-zip");
-const { pipeline } = require("stream/promises");
+import fsNative from "node:fs";
+import fs from "node:fs/promises";
+import type { Server } from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { pipeline } from "node:stream/promises";
+import AdmZip from "adm-zip";
+import axios from "axios";
+import * as cheerio from "cheerio";
+import express from "express";
 
 const app = express();
 
@@ -498,7 +499,7 @@ async function refreshDownloadedPackMetadata(songLibraryPathInput, packId, candi
   const topFolders = await listTopLevelDirectories(songLibraryPath).catch(() => []);
 
   const linkedFolders = Object.entries(cache.packs)
-    .filter(([, entry]) => entry && entry.linkedPackId === packId)
+    .filter(([, entry]) => entry && (entry as any).linkedPackId === packId)
     .map(([folderName]) => folderName);
 
   const inferredFolders = inferMatchingFoldersByPackName(topFolders, remotePackItem?.name || "");
@@ -707,7 +708,7 @@ async function collectPackSongs(packRootPath) {
   return songs;
 }
 
-async function buildLocalLibraryItems(songLibraryPathInput, filters = {}) {
+async function buildLocalLibraryItems(songLibraryPathInput, filters: { songtitle?: string; songartist?: string } = {}) {
   if (!songLibraryPathInput) {
     return [];
   }
@@ -1609,8 +1610,8 @@ app.get("/health", (_, res) => {
   res.json({ ok: true });
 });
 
-function startApiServer(port = 3000) {
-  return new Promise((resolve, reject) => {
+export function startApiServer(port = 3000): Promise<Server> {
+  return new Promise<Server>((resolve, reject) => {
     const server = app.listen(port, () => {
       const address = server.address();
       const resolvedPort = typeof address === "object" && address ? address.port : port;
@@ -1624,15 +1625,4 @@ function startApiServer(port = 3000) {
   });
 }
 
-if (require.main === module) {
-  const port = Number(process.env.PORT || 3000);
-  startApiServer(port).catch((error) => {
-    console.error("Failed to start simBridge API server:", error);
-    process.exit(1);
-  });
-}
-
-module.exports = {
-  app,
-  startApiServer
-};
+export { app };

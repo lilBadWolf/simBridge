@@ -11,5 +11,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*.ts", "vite.*.ts"]
+  "include": ["src/**/*.ts", "server.ts", "forge.config.ts", "vite.*.ts"]
 }

@@ -2,10 +2,7 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-
-const { startApiServer } = require("../../server.js") as {
-  startApiServer: (port?: number) => Promise<Server>;
-};
+import { startApiServer } from "../../server";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;

@@ -1,8 +1,9 @@
-const { MakerZIP } = require("@electron-forge/maker-zip");
-const { MakerDeb } = require("@electron-forge/maker-deb");
-const { VitePlugin } = require("@electron-forge/plugin-vite");
+import { MakerDeb } from "@electron-forge/maker-deb";
+import { MakerZIP } from "@electron-forge/maker-zip";
+import { VitePlugin } from "@electron-forge/plugin-vite";
+import type { ForgeConfig } from "@electron-forge/shared-types";
 
-module.exports = {
+const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     executableName: "simBridge",
@@ -75,3 +76,5 @@ module.exports = {
     })
   ]
 };
+
+export default config;
