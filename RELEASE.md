@@ -1,37 +1,28 @@
-# simBridge v1.0.0 - First Public Release 🚀🎉
+# simBridge v1.0.1 - TypeScript + Vue Glow-Up ⚡🎨
 
-The wait is over. simBridge is officially out in the wild. 🐺
+This update is all about making simBridge faster to iterate, easier to maintain, and cleaner to extend for upcoming features. 🧰💙
 
-If you play DDR, StepMania, or ITGmania, this is your new "find it, grab it, organize it" sidekick. ⚡
+Behind the scenes, we gave the app a serious architecture refresh so future updates can land quicker and with fewer surprises. 🚀
 
-## What's New ✨
+## What Got Better ✨
 
-- Browse simfiles from zIV Songs and Stepmania Packs in one place 🌐
-- Search fast by Title, Artist, or Pack Name 🔎
-- Check details before you commit, including charts and quality info 🧠
-- Download directly from the app and auto-unzip into your Songs library 📦
-- See what is already installed so you do not double-download ✅
-- Switch to Downloaded view to browse your local packs and inspect included songs 🎵
-- Pick your Song Library folder with a native file picker and keep it saved 🗂️
+- Full TypeScript migration across the app codebase for safer, more reliable updates 🛡️
+- Frontend modernized into Vue Single File Components for cleaner UI structure 🧩
+- Renderer startup flow simplified and hardened for better dev stability 🔧
+- Build and startup validation completed after migration so packaging still works out of the box 📦
+- Runtime startup bug fixed after migration, so launch is smooth again ✅
 
-## Why It Slaps For Simfile Management 💿🔥
+## Why You Care As A Player/Creator 🎵
 
-- Less tab chaos: no more bouncing between sites and folders all night
-- Less guesswork: details and status make it obvious what to grab
-- Less clutter: installed detection helps prevent duplicates
-- Less friction: search, download, unzip, done
-
-## Quality Of Life Wins 🙌
-
-- Cleaner source switching between zIV, Stepmania, and Downloaded
-- Better status messaging while searching and downloading
-- Compact layout tweaks to keep more songs visible on screen
-- Smoother first-run setup for your Songs path
+- More stable releases going forward
+- Faster turnaround on UI and quality-of-life improvements
+- Better foundation for upcoming feature work without weird regressions
 
 ## Notes 📝
 
-- Source availability depends on third-party sites and their current listings
-- Download speed depends on host response and file size
-- This is the first release, and more heat is coming soon 😎
+- Core browsing/search/download experience remains familiar in this release
+- This is an infrastructure-heavy upgrade focused on reliability and future velocity
 
-Thanks for taking simBridge for a spin. Go build a ridiculous song library. 🕺💃
+Thank you for rocking with simBridge. More heat coming soon. 🐺🔥
+
+Built with minimal guidance by GPT-5.3-Codex. 🤖✨
