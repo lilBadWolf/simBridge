@@ -22,14 +22,20 @@ module.exports = {
       name: "@felixrieseberg/electron-forge-maker-nsis",
       platforms: ["win32"],
       config: {
-        getAdditionalConfig: () => ({
-          oneClick: false,
-          perMachine: true,
-          allowToChangeInstallationDirectory: true,
-          installerIcon: "build/icon.ico",
-          uninstallerIcon: "build/icon.ico",
-          installerHeaderIcon: "build/icon.ico",
-          artifactName: "${productName}Setup-${version}-${arch}.${ext}"
+        getAppBuilderConfig: async () => ({
+          publish: null,
+          win: {
+            publish: null,
+            artifactName: "${productName}Setup-${version}-${arch}.${ext}"
+          },
+          nsis: {
+            oneClick: false,
+            perMachine: true,
+            allowToChangeInstallationDirectory: true,
+            installerIcon: "build/icon.ico",
+            uninstallerIcon: "build/icon.ico",
+            installerHeaderIcon: "build/icon.ico"
+          }
         })
       }
     },
@@ -38,6 +44,7 @@ module.exports = {
     new MakerDeb(
       {
         options: {
+          bin: "simBridge",
           maintainer: "The Company of Wolves",
           homepage: "https://thecompanyofwolves.com"
         }
