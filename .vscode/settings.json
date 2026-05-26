@@ -21,6 +21,7 @@
             "approve": true,
             "matchCommandLine": true
         },
-        "o": true
+        "o": true,
+        ".github/workflows/ci.yml": true
     }
 }
