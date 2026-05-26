@@ -1,4 +1,4 @@
-# simBridge v1.0.1 - TypeScript + Vue Glow-Up ⚡🎨
+# simBridge v1.0.2 - TypeScript + Vue Glow-Up ⚡🎨
 
 This update is all about making simBridge faster to iterate, easier to maintain, and cleaner to extend for upcoming features. 🧰💙
 

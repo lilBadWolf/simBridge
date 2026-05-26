@@ -1,7 +1,7 @@
 {
   "name": "simbridge",
   "productName": "simBridge",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Desktop simfile browser/downloader",
   "main": ".vite/build/main.js",
   "scripts": {
